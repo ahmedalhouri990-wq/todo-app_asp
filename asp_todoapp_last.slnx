@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="asp_todoapp_last.ApiService/asp_todoapp_last.ApiService.csproj" />
+  <Project Path="asp_todoapp_last.AppHost/asp_todoapp_last.AppHost.csproj" />
+  <Project Path="asp_todoapp_last.ServiceDefaults/asp_todoapp_last.ServiceDefaults.csproj" />
+  <Project Path="asp_todoapp_last.Web/asp_todoapp_last.Web.csproj" />
+</Solution>

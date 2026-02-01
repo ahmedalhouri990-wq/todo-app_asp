@@ -1,0 +1,354 @@
+@page "/todos"
+@using asp_todoapp_last.Web
+@inject TodoApiClient TodoClient
+@rendermode InteractiveServer
+
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h1 class="mb-4">📝 My To-Do List</h1>
+        </div>
+    </div>
+
+    @if (showAddForm)
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Add New Todo</h5>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Title</label>
+                        <input type="text" class="form-control" @bind="newTodoTitle" placeholder="Enter todo title" />
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Priority</label>
+                        <select class="form-select" @bind="newTodoPriority">
+                            <option value="0">Low</option>
+                            <option value="1" selected>Medium</option>
+                            <option value="2">High</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Due Date</label>
+                        <input type="date" class="form-control" @bind="newTodoDueDate" />
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" @onclick="AddTodo">Save</button>
+                    <button class="btn btn-secondary" @onclick="() => showAddForm = false">Cancel</button>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <button class="btn btn-success mb-4" @onclick="() => showAddForm = true">+ Add New Todo</button>
+    }
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Filters & Sorting</h5>
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Filter by Priority</label>
+                    <select class="form-select" @onchange="OnFilterPriorityChanged">
+                        <option value="">All Priorities</option>
+                        <option value="0">Low</option>
+                        <option value="1">Medium</option>
+                        <option value="2">High</option>
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Filter by Status</label>
+                    <select class="form-select" @onchange="OnFilterStatusChanged">
+                        <option value="">All Tasks</option>
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Sort By</label>
+                    <select class="form-select" @onchange="OnSortChanged">
+                        <option value="date-asc">Date (Oldest First)</option>
+                        <option value="date-desc">Date (Newest First)</option>
+                        <option value="priority-high">Priority (High to Low)</option>
+                        <option value="priority-low">Priority (Low to High)</option>
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3 d-flex align-items-end">
+                    <button class="btn btn-info w-100" @onclick="RefreshTodos">🔄 Refresh</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="alert alert-info">Loading todos...</div>
+    }
+    else if (filteredTodos == null || filteredTodos.Count == 0)
+    {
+        <div class="alert alert-warning">No todos found. Create one to get started!</div>
+    }
+    else
+    {
+        <div class="row">
+            @foreach (var todo in filteredTodos)
+            {
+                <div class="col-md-12 mb-3">
+                    <div class="card @(todo.IsComplete ? "opacity-50" : "")">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-1">
+                                    <input type="checkbox" class="form-check-input" checked="@todo.IsComplete" 
+                                           @onchange="@((ChangeEventArgs e) => ToggleTodoComplete(todo, (bool)e.Value!))" />
+                                </div>
+                                <div class="col-md-5">
+                                    <h6 class="card-title mb-2 @(todo.IsComplete ? "text-decoration-line-through" : "")">
+                                        @todo.Title
+                                    </h6>
+                                </div>
+                                <div class="col-md-2">
+                                    <span class="badge @GetPriorityBadgeClass(todo.Priority)">
+                                        @GetPriorityText(todo.Priority)
+                                    </span>
+                                </div>
+                                <div class="col-md-2">
+                                    @if (todo.DueDate.HasValue)
+                                    {
+                                        <small class="text-muted">📅 @todo.DueDate.Value.ToString("MMM dd, yyyy")</small>
+                                    }
+                                </div>
+                                <div class="col-md-2 text-end">
+                                    <button class="btn btn-sm btn-warning me-2" @onclick="() => EditTodo(todo)">Edit</button>
+                                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteTodo(todo.Id)">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @if (editingTodoId == todo.Id && editingTodo != null)
+                {
+                    <div class="col-md-12 mb-3">
+                        <div class="card border-primary">
+                            <div class="card-body">
+                                <h5 class="card-title">Edit Todo</h5>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Title</label>
+                                        <input type="text" class="form-control" @bind="editingTodo.Title" />
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label class="form-label">Priority</label>
+                                        <select class="form-select" @bind="editingTodo.Priority">
+                                            <option value="0">Low</option>
+                                            <option value="1">Medium</option>
+                                            <option value="2">High</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label class="form-label">Due Date</label>
+                                        <input type="date" class="form-control" @bind="editingTodo.DueDate" />
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-primary" @onclick="SaveEditedTodo">Save Changes</button>
+                                    <button class="btn btn-secondary" @onclick="() => editingTodoId = 0">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="mt-4">
+            <small class="text-muted">
+                Total: @todos?.Count | Completed: @todos?.Count(t => t.IsComplete) | Pending: @todos?.Count(t => !t.IsComplete)
+            </small>
+        </div>
+    }
+</div>
+
+@code {
+    private List<TodoItemDto>? todos;
+    private List<TodoItemDto>? filteredTodos;
+    private bool isLoading;
+    private bool showAddForm;
+
+    private string newTodoTitle = "";
+    private PriorityDto newTodoPriority = PriorityDto.Medium;
+    private DateTime? newTodoDueDate;
+
+    private int editingTodoId;
+    private UpdateTodoDto? editingTodo;
+
+    private string filterPriority = "";
+    private string filterStatus = "";
+    private string sortBy = "date-asc";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshTodos();
+    }
+
+    private async Task RefreshTodos()
+    {
+        isLoading = true;
+        todos = await TodoClient.GetTodosAsync();
+        ApplyFiltersAndSort();
+        isLoading = false;
+    }
+
+    private void ApplyFiltersAndSort()
+    {
+        if (todos == null)
+            return;
+
+        filteredTodos = todos.ToList();
+
+        // Apply priority filter
+        if (!string.IsNullOrEmpty(filterPriority) && int.TryParse(filterPriority, out int priorityValue))
+        {
+            filteredTodos = filteredTodos.Where(t => (int)t.Priority == priorityValue).ToList();
+        }
+
+        // Apply status filter
+        if (filterStatus == "pending")
+        {
+            filteredTodos = filteredTodos.Where(t => !t.IsComplete).ToList();
+        }
+        else if (filterStatus == "completed")
+        {
+            filteredTodos = filteredTodos.Where(t => t.IsComplete).ToList();
+        }
+
+        // Apply sorting
+        filteredTodos = sortBy switch
+        {
+            "date-asc" => filteredTodos.OrderBy(t => t.DueDate ?? DateTime.MaxValue).ToList(),
+            "date-desc" => filteredTodos.OrderByDescending(t => t.DueDate ?? DateTime.MinValue).ToList(),
+            "priority-high" => filteredTodos.OrderByDescending(t => t.Priority).ToList(),
+            "priority-low" => filteredTodos.OrderBy(t => t.Priority).ToList(),
+            _ => filteredTodos
+        };
+    }
+
+    private async Task AddTodo()
+    {
+        if (string.IsNullOrWhiteSpace(newTodoTitle))
+            return;
+
+        var dto = new CreateTodoDto
+        {
+            Title = newTodoTitle,
+            Priority = newTodoPriority,
+            DueDate = newTodoDueDate
+        };
+
+        var created = await TodoClient.CreateTodoAsync(dto);
+        if (created != null)
+        {
+            todos?.Add(created);
+            newTodoTitle = "";
+            newTodoPriority = PriorityDto.Medium;
+            newTodoDueDate = null;
+            showAddForm = false;
+            ApplyFiltersAndSort();
+        }
+    }
+
+    private async Task ToggleTodoComplete(TodoItemDto todo, bool isComplete)
+    {
+        var dto = new UpdateTodoDto
+        {
+            IsComplete = isComplete
+        };
+
+        var updated = await TodoClient.UpdateTodoAsync(todo.Id, dto);
+        if (updated != null)
+        {
+            var index = todos?.FindIndex(t => t.Id == todo.Id) ?? -1;
+            if (index >= 0)
+            {
+                todos![index] = updated;
+                ApplyFiltersAndSort();
+            }
+        }
+    }
+
+    private void EditTodo(TodoItemDto todo)
+    {
+        editingTodoId = todo.Id;
+        editingTodo = new UpdateTodoDto
+        {
+            Title = todo.Title,
+            IsComplete = todo.IsComplete,
+            DueDate = todo.DueDate,
+            Priority = todo.Priority
+        };
+    }
+
+    private async Task SaveEditedTodo()
+    {
+        if (editingTodo == null || editingTodoId == 0)
+            return;
+
+        var updated = await TodoClient.UpdateTodoAsync(editingTodoId, editingTodo);
+        if (updated != null)
+        {
+            var index = todos?.FindIndex(t => t.Id == editingTodoId) ?? -1;
+            if (index >= 0)
+            {
+                todos![index] = updated;
+                editingTodoId = 0;
+                editingTodo = null;
+                ApplyFiltersAndSort();
+            }
+        }
+    }
+
+    private async Task DeleteTodo(int id)
+    {
+        if (await TodoClient.DeleteTodoAsync(id))
+        {
+            todos?.RemoveAll(t => t.Id == id);
+            ApplyFiltersAndSort();
+        }
+    }
+
+    private void OnFilterPriorityChanged(ChangeEventArgs e)
+    {
+        filterPriority = e.Value?.ToString() ?? "";
+        ApplyFiltersAndSort();
+    }
+
+    private void OnFilterStatusChanged(ChangeEventArgs e)
+    {
+        filterStatus = e.Value?.ToString() ?? "";
+        ApplyFiltersAndSort();
+    }
+
+    private void OnSortChanged(ChangeEventArgs e)
+    {
+        sortBy = e.Value?.ToString() ?? "date-asc";
+        ApplyFiltersAndSort();
+    }
+
+    private string GetPriorityBadgeClass(PriorityDto priority) => priority switch
+    {
+        PriorityDto.High => "bg-danger",
+        PriorityDto.Medium => "bg-warning text-dark",
+        PriorityDto.Low => "bg-info",
+        _ => "bg-secondary"
+    };
+
+    private string GetPriorityText(PriorityDto priority) => priority switch
+    {
+        PriorityDto.High => "🔴 High",
+        PriorityDto.Medium => "🟡 Medium",
+        PriorityDto.Low => "🔵 Low",
+        _ => "Unknown"
+    };
+}
